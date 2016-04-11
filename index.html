@@ -143,3 +143,279 @@
     </script>
   </body>
 </html>
+
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.8/d3.min.js"></script>
+  <style>
+    body {
+        font-family: helvetica;
+    }
+    h2.title {
+      color: black;
+      text-align: center;
+    }
+
+    .axis text {
+        font-size: 0.75em;
+        stroke: none;
+        font-family: 'Gill Sans', 'Gill Sans MT', Calibri, sans-serif;
+    }
+
+    text {
+      fill: black;
+    }
+
+    text.label {
+      font-size: 1.2em;
+    }
+
+    path {
+      fill: none;
+      stroke: black;
+      stroke-width: 1px;
+    }
+    .tick {
+      fill: none;
+      stroke: black;
+    }
+    .line {
+      fill: none;
+      stroke: #4eb0bb;
+      stroke-width: 1px;
+    }
+  </style>
+  <script>
+    function draw(data) {
+    "use strict";
+    /*
+        D3.js setup code
+    */
+    // set margins according to Mike Bostock's margin conventions
+    // http://bl.ocks.org/mbostock/3019563
+    var margin = {top: 25, right: 40, bottom: 200, left: 100};
+    
+    // set height and width of chart
+    var width = innerWidth - margin.left - margin.right,
+        height = innerHeight - margin.top - margin.bottom;
+    
+    // specify the radius of our circles and the
+    // column we want to plot
+    var radius = 3,
+        field = 'Libimseti - Czech Dating website',
+        x_field = "gender",
+        y_field = "region";
+  
+    // Append the title for the graph
+    d3.select("body")
+        .append("h2")
+        .text(field + " - user gender by region (Part 2)")
+        .attr('class', 'title');
+    
+    // append the SVG tag with height and width to accommodate for margins
+    var svg = d3.select("body")
+                .append("svg")
+                    .attr("width", width + margin.left + margin.right)
+                    .attr("height", height + margin.top + margin.bottom)
+                .append('g')
+                    .attr('class','chart')
+                    .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+    // group data based on neighborhood and type of listing
+    var nested = d3.nest()
+                   .key(function(d) {
+                        return d.region;
+                   })
+                   .key(function(d) {
+                        return d.gender;
+                   })
+                   .rollup(function(leaves) {
+                        return leaves.length;
+                   })
+                   .entries(data);
+      
+      nested.forEach(function(group) {
+        var y0 = 0;
+
+        group.values = group.values.sort(function(a, b) {
+                            return a.key < b.key ? -1 : 1;
+                       }).map(function(d) {
+                                d.y0 = y0;
+                                d.y1 = y0 += d.values;
+                                return d;
+                        });
+        });
+
+      var total_listing = function(d) {
+          return d.values.reduce(function(a, b) {
+            return a + b.values;
+        }, 0)
+      };
+
+      // x scale
+      var x_scale = d3.scale.ordinal()
+                            .rangeRoundBands([0, width], .1)
+                            .domain(nested.sort(function(a, b) {
+                                        return total_listing(b) - total_listing(a);
+                                    }).map(function(d) {
+                                        return d.key;
+                                    }));
+
+      // get max y
+      var max_y = d3.max(nested, total_listing);
+
+      // Create y-axis scale mapping price -> pixels
+      var y_scale = d3.scale.linear()
+          .range([height, 0])
+          .domain([0, max_y]);
+
+      // create scale for color bars
+      var color = d3.scale.ordinal()
+                    .range(["#7fc97f", "#beaed4", "#fdc086"])
+                    .domain(nested[0].values.map(function(d) {
+                        return d.key;
+                    }));
+
+      // Create D3 axis object from time_scale for the x-axis
+      var x_axis = d3.svg.axis()
+          .scale(x_scale)
+          .orient('bottom');
+
+      // Create D3 axis object from measure_scale for the y-axis
+      var y_axis = d3.svg.axis()
+          .scale(y_scale)
+          .orient("left");
+
+      // Append SVG to page corresponding to the D3 x-axis
+      svg.append('g')
+          .attr('class', 'x axis')
+          .attr('transform', "translate(0," + height + ")")
+          .call(x_axis)
+            .selectAll("text")
+            .attr("transform", "rotate(-90)")
+            .attr("x", -5)
+            .attr('y', 0)
+            .attr("dy", ".25em")
+            .style("text-anchor", "end");
+
+      // hide x-axis lines
+      svg.select('.x.axis').select('path').remove();
+      svg.select('.x.axis').selectAll('line').remove();
+
+      // Append SVG to page corresponding to the D3 y-axis
+      svg.append('g')
+          .attr('class', 'y axis')
+          .call(y_axis);
+
+      // add label to y-axis
+      var y_label = d3.select(".y.axis")
+          .append("text")
+          .attr('class', 'label')
+          .text("Number of Listings")
+          .attr("transform", "rotate(-90)");
+      
+      // center y axis label
+      y_label.attr("x", -(height / 2)).attr('y', -60)
+            .style("text-anchor", "middle");
+
+      // bind nested data and create a group for each bar
+      var neigh = svg.selectAll(".neigh")
+                      .data(nested)
+                    .enter().append("g")
+                      .attr("class", "neigh")
+                      .attr("transform", function(d) { return "translate(" + x_scale(d.key) + ",0)"; });
+
+      // based on the data bound to each svg rect,
+      // change its coordinates
+      neigh.selectAll("rect")
+          .data(function(d) { return d.values })
+        .enter().append("rect")
+          .attr("width", x_scale.rangeBand())
+          .attr("y", function(d) { debugger; return y_scale(d.y1); })
+          .attr("height", function(d) { debugger; return y_scale(d.y0) - y_scale(d.y1); })
+          .style("fill", function(d) { return color(d.key); });
+
+      // append a legend
+      var legend = svg.selectAll(".legend")
+          .data(color.domain().slice().reverse())
+        .enter().append("g")
+          .attr("class", "legend")
+          .attr("transform", function(d, i) { return "translate(0," + i * 20 + ")"; });
+
+      // append the colored square for legend
+      legend.append("rect")
+          .attr("x", width - 18)
+          .attr("width", 18)
+          .attr("height", 18)
+          .style("fill", color);
+
+      // append the text for the legend
+      legend.append("text")
+          .attr("x", width - 24)
+          .attr("y", 9)
+          .attr("dy", ".35em")
+          .style("text-anchor", "end")
+          .text(function(d) { return d; });
+          
+        // make the bar chart responsive
+        var resize = function resize() {
+            // recalculate width and height
+            var width = innerWidth - margin.left - margin.right,
+                height = innerHeight - margin.top - margin.bottom;
+            
+            // recalculate scales
+            x_scale.rangeRoundBands([0, width], .1)
+            y_scale.range([height, 0]);
+
+            // resize x axis
+            svg.select('.x.axis')
+                 .attr("transform", "translate(0," + height + ")")
+                 .call(x_axis)
+                 .selectAll("text")
+                 .attr("transform", "rotate(-90)")
+                 .attr("x", -5)
+                 .attr('y', 0)
+                 .attr("dy", ".25em")
+                 .style("text-anchor", "end");
+
+            // reposition x axis label
+            svg.select('.x.axis .label').attr("x", width / 2 )
+            
+            // resize y axis
+            svg.select('.y.axis')
+                 .call(y_axis);
+
+            // hide x-axis lines
+            svg.select('.x.axis').select('path').remove();
+            svg.select('.x.axis').selectAll('line').remove();
+
+            // reposition y axis label
+            y_label.attr("x", -(height / 2));
+            
+            // reposition bars
+            neigh.attr("transform", function(d) { return "translate(" + x_scale(d.key) + ",0)"; });
+
+            // resize bands within each bar
+            neigh.selectAll('rect')
+              .attr("width", x_scale.rangeBand())
+              .attr("y", function(d) { debugger; return y_scale(d.y1); })
+              .attr("height", function(d) { debugger; return y_scale(d.y0) - y_scale(d.y1); })
+
+            // reposition legend
+            legend.select('rect').attr("x", width - 18);
+            legend.select('text').attr("x", width - 24);
+        };
+        
+        // trigger resize on window resize
+        d3.select(window).on('resize', resize);
+    }
+  </script>
+</head>
+<body>
+  <script>
+    // load data
+    d3.csv("gender.csv", draw);
+  </script>
+</body>
+</html>
